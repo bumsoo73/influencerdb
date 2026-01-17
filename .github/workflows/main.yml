@@ -4,28 +4,36 @@ on:
   schedule:
     # 한국 00:01 = UTC 15:01
     - cron: '1 15 * * *'
-  workflow_dispatch: # 수동 실행 버튼 추가
+# ★ 이 부분(workflow_dispatch)을 아래처럼 수정/추가하세요 ★
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: '업데이트할 특정 URL (없으면 전체 실행)'
+        required: false
+        default: ''
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9' # 쓰시는 버전에 맞게
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
 
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-
-      - name: Create json key file
-        run: |
-          echo '${{ secrets.GOOGLE_SHEET_KEY }}' > key.json
-
-      - name: Run crawler
-        run: python main.py
+    # ★ 파이썬 실행 단계 수정 ★
+    - name: Run Crawler
+      env:
+        # 깃허브가 받은 입력값을 'TARGET_URL'이라는 환경변수에 담음
+        TARGET_URL: ${{ github.event.inputs.target_url }}
+        # (기존에 쓰시던 다른 환경변수들도 여기 그대로 두세요. 예: GOOGLE_KEY 등)
+      run: |
+        python main.py
