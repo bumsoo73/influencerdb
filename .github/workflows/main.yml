@@ -28,12 +28,14 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        
+# [추가할 부분] 금고(Secret)에 있는 내용을 꺼내서 key.json 파일을 만드는 마법
+    - name: Create key file
+      run: echo '${{ secrets.GOOGLE_KEY_JSON }}' > key.json
 
-    # ★ 파이썬 실행 단계 수정 ★
+    # ... (그 다음이 Run Crawler 단계) ...
     - name: Run Crawler
       env:
-        # 깃허브가 받은 입력값을 'TARGET_URL'이라는 환경변수에 담음
-        TARGET_URL: ${{ github.event.inputs.target_url }}
-        # (기존에 쓰시던 다른 환경변수들도 여기 그대로 두세요. 예: GOOGLE_KEY 등)
+         TARGET_URL: ${{ github.event.inputs.target_url }}
       run: |
         python main.py
