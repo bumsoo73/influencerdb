@@ -1,0 +1,31 @@
+name: Mammam Daily Update
+
+on:
+  schedule:
+    # 한국 시간 새벽 2시 = UTC 17시 (전날)
+    - cron: '0 17 * * *'
+  workflow_dispatch: # 수동 실행 버튼 추가
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Create json key file
+        run: |
+          echo '${{ secrets.GOOGLE_SHEET_KEY }}' > key.json
+
+      - name: Run crawler
+        run: python main.py
