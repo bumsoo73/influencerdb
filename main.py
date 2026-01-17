@@ -4,7 +4,7 @@ import instaloader
 import time
 import random
 import datetime
-import os  # [수정] 환경변수 읽기 위해 추가
+import os
 
 # ==========================================
 # [설정]
@@ -21,7 +21,6 @@ def connect_google_sheets():
     return sheet
 
 def get_instagram_data(username):
-    # "저 로봇 아닙니다" 하고 가짜 신분증(User-Agent) 만들기
     L = instaloader.Instaloader(user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
     
     try:
@@ -49,7 +48,6 @@ def get_instagram_data(username):
                 total_views += post.video_view_count
             
             count += 1
-            # 게시물 하나 볼 때마다 2~5초 천천히 보기
             time.sleep(random.uniform(2, 5))
 
         # 3. 점수 계산
@@ -71,45 +69,56 @@ def get_instagram_data(username):
 
     except Exception as e:
         print(f"❌ 에러 발생 ({username}): {e}")
-        
-        # "잠깐 기다려(Please wait)" 에러 뜨면 2분 동안 죽은 척 하기
         if "401" in str(e) or "Please wait" in str(e):
             print("   🚨 인스타그램이 눈치챘습니다! 2분간 대기합니다...")
             time.sleep(120) 
-        
         return None
 
 def main():
     sheet = connect_google_sheets()
     today = datetime.datetime.now().strftime("%Y-%m-%d")
     
-    # [수정] 깃허브에서 보낸 특정 URL이 있는지 확인 (없으면 빈 문자열)
+    # [설정] 깃허브(앱시트)에서 보낸 타겟 URL 확인
     target_url = os.environ.get('TARGET_URL', '').strip()
     
     if target_url:
         print(f"🚀 [단건 실행 모드] '{target_url}' 계정만 업데이트합니다.")
     else:
-        print(f"🔄 [전체 실행 모드] 전체 리스트를 스캔합니다.")
+        print(f"🔄 [전체/빈칸채우기 모드] ID가 없거나 업데이트가 필요한 항목을 찾습니다.")
 
-    urls = sheet.col_values(4) 
+    # 1. 데이터를 한 번에 다 가져오기 (속도 최적화)
+    col_ids = sheet.col_values(1)    # A열 (ID)
+    col_urls = sheet.col_values(4)   # D열 (링크)
+    col_dates = sheet.col_values(17) # Q열 (업데이트일) - 본인 시트에 맞게 수정!
     
     # enumerate 시작값 2 (헤더 다음부터)
-    for i, url in enumerate(urls[1:], start=2):
+    for i, url in enumerate(col_urls[1:], start=2):
         if not url or "instagram.com" not in url: continue
         
-        # [핵심 로직] 타겟 URL이 지정되어 있다면, 그 URL이 아닌 건 다 건너뜀
+        # 리스트 범위 오류 방지용 안전장치
+        current_id = col_ids[i-1] if len(col_ids) > i-1 else ""
+        last_update = col_dates[i-1] if len(col_dates) > i-1 else ""
+
+        # ==================================================
+        # [핵심 로직] 실행 여부 결정
+        # ==================================================
+        
+        # 1. 단건 모드: 타겟 URL과 다르면 건너뜀
         if target_url and target_url != url:
             continue
-
-        # [핵심 로직] 전체 모드일 때만 '오늘 날짜' 체크해서 건너뜀 
-        # (단건 모드일 때는 날짜 상관없이 강제 업데이트)
-        last_update = sheet.cell(i, 17).value 
-        if not target_url and last_update == today:
-            print(f"PASS: {url} (오늘 이미 완료)")
-            continue
+            
+        # 2. 전체 모드 (타겟 URL 없음):
+        if not target_url:
+            # ID가 없으면? -> 실행 (빈칸 채우기)
+            if not current_id or current_id == "":
+                pass 
+            # ID는 있는데 오늘 이미 했다? -> 건너뜀
+            elif last_update == today:
+                print(f"PASS: {url} (오늘 이미 완료)")
+                continue
+        # ==================================================
 
         try:
-            # URL에서 유저네임 추출 로직
             username = url.strip().split("instagram.com/")[-1].replace("/", "").split("?")[0]
         except:
             continue
@@ -118,15 +127,17 @@ def main():
         data = get_instagram_data(username)
         
         if data:
-            # A열: ID (없으면 생성)
-            current_id = sheet.cell(i, 1).value
+            # ID 생성 로직 (현재 ID가 없을 때만)
+            # 데이터를 다시 읽지 않고, 위에서 읽은 current_id 변수 활용
             if not current_id:
-                sheet.update_cell(i, 1, f"INF_{i:03d}") 
+                new_id = f"INF_{i:03d}"
+                sheet.update_cell(i, 1, new_id)
+                print(f"   ✨ ID 생성: {new_id}")
             
-            # 저장 로직 (순서대로)
+            # 데이터 저장
             sheet.update_cell(i, 2, data['username'])
             sheet.update_cell(i, 3, data['full_name'])
-            # D열(링크) 건너뜀
+            # D열(링크)은 건드리지 않음
             sheet.update_cell(i, 5, data['profile_pic'])
             sheet.update_cell(i, 6, data['followers'])
             sheet.update_cell(i, 7, data['score'])
@@ -136,14 +147,14 @@ def main():
             
             print(f"   ✅ 저장 완료! (점수: {data['score']})")
         
-        # [수정] 단건 실행이면 여기서 프로그램 종료 (불필요한 대기/루프 방지)
+        # 단건 모드라면 여기서 바로 종료
         if target_url:
             print("🚀 단건 업데이트 완료! 프로그램을 종료합니다.")
             break 
 
-        # 한 명 끝나면 15~30초 푹 쉬기
+        # 전체 모드일 때만 휴식
         wait_time = random.uniform(15, 30)
-        print(f"   -> 인스타그램 눈치 보는 중... {int(wait_time)}초 휴식")
+        print(f"   -> {int(wait_time)}초 휴식...")
         time.sleep(wait_time)
 
 if __name__ == "__main__":
