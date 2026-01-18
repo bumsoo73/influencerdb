@@ -7,20 +7,22 @@ import datetime
 import os
 
 # ==========================================
-# [설정] 앱시트 인플루언서_DB 구조에 딱 맞춤
+# [설정] 알려주신 1~18번 구조에 완벽 매칭
+# ==========================================
 SPREADSHEET_KEY = "1hQ1CKUWOlAZNQB3JK74hSZ3hI-QPbEpVGrn5q0PUGlg" 
 TAB_NAME = "인플루언서_DB"
 
-# 열 번호 매칭 (시트 캡처본 기준)
-COL_ID = 2            # B열: ID (코드에서 INF_001 생성용)
-COL_INSTA_ID = 3      # C열: 인스타ID (대표님이 입력한 값)
-COL_LINK = 4          # D열: 링크 (자동 생성될 주소)
-COL_PROFILE_PIC = 6   # F열: 프로필사진
-COL_FOLLOWERS = 7     # G열: 팔로워
-COL_SCORE = 8         # H열: 화력점수
-COL_AVG_VIEWS = 9     # I열: 평균조회수
-COL_BIO = 10          # J열: 소개글(Bio)
-COL_UPDATE_DATE = 18  # R열: 업데이트일 (TODAY)
+# 열 번호 매칭 (말씀하신 번호 그대로 적용)
+COL_ID = 1            # 1: ID (A열)
+COL_INSTA_ID = 2      # 2: 인스타ID (B열)
+COL_CHANNEL_NAME = 3  # 3: 채널명 (C열)
+COL_LINK = 4          # 4: 링크 (D열)
+COL_PROFILE_PIC = 5   # 5: 프로필사진 (E열)
+COL_FOLLOWERS = 6     # 6: 팔로워 (F열)
+COL_SCORE = 7         # 7: 🔥화력점수 (G열)
+COL_AVG_VIEWS = 8     # 8: 평균조회수 (H열)
+COL_BIO = 9           # 9: 소개글(Bio) (I열)
+COL_UPDATE_DATE = 17  # 17: 업데이트일 (Q열)
 # ==========================================
 
 def connect_google_sheets():
@@ -32,18 +34,15 @@ def connect_google_sheets():
     return sheet
 
 def get_instagram_data(username):
-    # 인스타그램 감시 피하기 위해 User-Agent 설정
     L = instaloader.Instaloader(user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
     try:
         profile = instaloader.Profile.from_username(L.context, username)
         
-        # 기본 정보 추출
         followers = profile.followers
         full_name = profile.full_name
         biography = profile.biography
         profile_pic = profile.profile_pic_url
         
-        # 최근 게시물 10개 분석
         posts = profile.get_posts()
         count, total_likes, total_comments, total_views = 0, 0, 0, 0
         
@@ -53,9 +52,8 @@ def get_instagram_data(username):
             total_comments += post.comments
             if post.is_video: total_views += post.video_view_count
             count += 1
-            time.sleep(random.uniform(1, 3)) # 간격 조절
+            time.sleep(random.uniform(1, 3))
 
-        # 점수 및 평균 조회수 계산
         score = total_likes + (total_comments * 3) + (total_views * 0.1)
         avg_views = int(total_views / count) if count > 0 else 0
 
@@ -70,9 +68,9 @@ def get_instagram_data(username):
 def main():
     sheet = connect_google_sheets()
     today = datetime.datetime.now().strftime("%Y-%m-%d")
-    target_id = os.environ.get('TARGET_ID', '').strip() # 깃허브 액션에서 받은 ID
+    target_id = os.environ.get('TARGET_ID', '').strip()
 
-    # 데이터 한 번에 가져오기
+    # 데이터 읽어오기 (2번 열: 인스타ID 기준)
     col_ids = sheet.col_values(COL_ID)
     col_insta_ids = sheet.col_values(COL_INSTA_ID)
     col_dates = sheet.col_values(COL_UPDATE_DATE)
@@ -89,25 +87,26 @@ def main():
 
         print(f"🔎 분석 시작: {insta_id} (Row {i})")
         
-        # ★ 로직 핵심: 아이디로 URL 자동 생성 ★
+        # ★ 아이디로 URL 자동 생성 (4번 열 저장용) ★
         generated_url = f"https://www.instagram.com/{insta_id}/"
         
         data = get_instagram_data(insta_id)
         
         if data:
-            # 1. 시트 데이터 업데이트 (번호표 생성 포함)
+            # 1. 시트 데이터 업데이트 (1번 열 ID 생성)
             current_id = col_ids[i-1] if len(col_ids) > i-1 else ""
             if not current_id:
                 sheet.update_cell(i, COL_ID, f"INF_{i:03d}")
             
-            # 2. 크롤링 데이터 저장
-            sheet.update_cell(i, COL_LINK, generated_url)      # 링크 자동 기입
-            sheet.update_cell(i, COL_PROFILE_PIC, data['profile_pic'])
-            sheet.update_cell(i, COL_FOLLOWERS, data['followers'])
-            sheet.update_cell(i, COL_SCORE, data['score'])
-            sheet.update_cell(i, COL_AVG_VIEWS, data['avg_views'])
-            sheet.update_cell(i, COL_BIO, data['bio'])
-            sheet.update_cell(i, COL_UPDATE_DATE, today)      # 업데이트 날짜 쾅!
+            # 2. 크롤링 데이터 저장 (알려주신 열 번호 그대로)
+            sheet.update_cell(i, COL_CHANNEL_NAME, data['full_name'])  # 3번 열
+            sheet.update_cell(i, COL_LINK, generated_url)              # 4번 열
+            sheet.update_cell(i, COL_PROFILE_PIC, data['profile_pic'])  # 5번 열
+            sheet.update_cell(i, COL_FOLLOWERS, data['followers'])      # 6번 열
+            sheet.update_cell(i, COL_SCORE, data['score'])              # 7번 열
+            sheet.update_cell(i, COL_AVG_VIEWS, data['avg_views'])      # 8번 열
+            sheet.update_cell(i, COL_BIO, data['bio'])                  # 9번 열
+            sheet.update_cell(i, COL_UPDATE_DATE, today)                # 17번 열
             
             print(f"   ✅ {insta_id} 저장 완료!")
 
