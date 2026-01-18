@@ -78,44 +78,40 @@ def main():
     sheet = connect_google_sheets()
     today = datetime.datetime.now().strftime("%Y-%m-%d")
     
-    # [설정] 깃허브(앱시트)에서 보낸 타겟 URL 확인
     target_url = os.environ.get('TARGET_URL', '').strip()
     
     if target_url:
         print(f"🚀 [단건 실행 모드] '{target_url}' 계정만 업데이트합니다.")
     else:
-        print(f"🔄 [전체/빈칸채우기 모드] ID가 없거나 업데이트가 필요한 항목을 찾습니다.")
+        print(f"🔄 [빈칸 채우기 모드] ID가 없는 항목만 찾아 업데이트합니다.")
 
-    # 1. 데이터를 한 번에 다 가져오기 (속도 최적화)
+    # 데이터 한 번에 가져오기
     col_ids = sheet.col_values(1)    # A열 (ID)
     col_urls = sheet.col_values(4)   # D열 (링크)
-    col_dates = sheet.col_values(17) # Q열 (업데이트일) - 본인 시트에 맞게 수정!
     
     # enumerate 시작값 2 (헤더 다음부터)
     for i, url in enumerate(col_urls[1:], start=2):
         if not url or "instagram.com" not in url: continue
         
-        # 리스트 범위 오류 방지용 안전장치
+        # 현재 줄의 ID 확인 (리스트 범위 안전장치 포함)
         current_id = col_ids[i-1] if len(col_ids) > i-1 else ""
-        last_update = col_dates[i-1] if len(col_dates) > i-1 else ""
 
         # ==================================================
-        # [핵심 로직] 실행 여부 결정
+        # [핵심 변경] 실행할지 말지 결정하는 판사님
         # ==================================================
         
-        # 1. 단건 모드: 타겟 URL과 다르면 건너뜀
+        # 1. 단건 모드: 타겟 URL과 다르면 건너뜀 (기존 동일)
         if target_url and target_url != url:
             continue
             
-        # 2. 전체 모드 (타겟 URL 없음):
+        # 2. 전체 모드 (빈칸 채우기):
         if not target_url:
-            # ID가 없으면? -> 실행 (빈칸 채우기)
-            if not current_id or current_id == "":
-                pass 
-            # ID는 있는데 오늘 이미 했다? -> 건너뜀
-            elif last_update == today:
-                print(f"PASS: {url} (오늘 이미 완료)")
+            # ★ ID가 있으면 무조건 건너뜁니다! (새벽에 돌릴 거니까)
+            if current_id and current_id.strip() != "":
+                # print(f"PASS: {url} (이미 등록됨)")
                 continue
+            
+            # ID가 없을 때만 아래로 통과!
         # ==================================================
 
         try:
@@ -123,16 +119,15 @@ def main():
         except:
             continue
         
-        print(f"🔄 {username} 분석 중... (Row {i})")
+        print(f"🆕 신규 발견! {username} 분석 시작... (Row {i})")
         data = get_instagram_data(username)
         
         if data:
-            # ID 생성 로직 (현재 ID가 없을 때만)
-            # 데이터를 다시 읽지 않고, 위에서 읽은 current_id 변수 활용
+            # ID 생성 (빈칸 채우기 핵심)
             if not current_id:
                 new_id = f"INF_{i:03d}"
                 sheet.update_cell(i, 1, new_id)
-                print(f"   ✨ ID 생성: {new_id}")
+                print(f"   ✨ ID 부여 완료: {new_id}")
             
             # 데이터 저장
             sheet.update_cell(i, 2, data['username'])
@@ -147,12 +142,12 @@ def main():
             
             print(f"   ✅ 저장 완료! (점수: {data['score']})")
         
-        # 단건 모드라면 여기서 바로 종료
+        # 단건 모드면 여기서 바로 종료
         if target_url:
             print("🚀 단건 업데이트 완료! 프로그램을 종료합니다.")
             break 
 
-        # 전체 모드일 때만 휴식
+        # 전체 모드(빈칸 채우기)일 때만 휴식
         wait_time = random.uniform(15, 30)
         print(f"   -> {int(wait_time)}초 휴식...")
         time.sleep(wait_time)
